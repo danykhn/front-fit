@@ -3,20 +3,21 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth-store';
-import { ROUTES } from '@/lib/constants';
+import { getDashboardRoute, ROUTES } from '@/lib/constants';
 import { Dumbbell, Loader2 } from 'lucide-react';
 
 export default function HomePage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   useEffect(() => {
-    if (user) {
-      router.push(ROUTES.DASHBOARD);
+    if (isAuthenticated && user) {
+      router.replace(getDashboardRoute(user.role));
     } else {
-      router.push(ROUTES.LOGIN);
+      router.replace(ROUTES.LOGIN);
     }
-  }, [user, router]);
+  }, [user, isAuthenticated, router]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
@@ -25,7 +26,7 @@ export default function HomePage() {
           <Dumbbell className="h-8 w-8 text-primary-foreground" />
         </div>
         <h1 className="text-2xl font-bold text-foreground mb-2">
-          TRAINER<span className="text-primary">PRO</span>
+          SS<span className="text-primary">ENGINE</span>
         </h1>
         <div className="flex items-center justify-center gap-2 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />

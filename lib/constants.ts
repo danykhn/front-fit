@@ -87,6 +87,19 @@ export const ATHLETE_ROUTES = {
   MY_PROFILE: '/athlete/profile',
 } as const;
 
+// Helper: ruta de dashboard segun el rol del usuario
+import type { Role } from '@/types';
+export const getDashboardRoute = (role: Role | string | undefined): string => {
+  switch (role) {
+    case 'ATHLETE':
+      return ATHLETE_ROUTES.DASHBOARD;
+    case 'ADMIN':
+    case 'TRAINER':
+    default:
+      return ROUTES.DASHBOARD;
+  }
+};
+
 // Configuracion de paginacion
 export const PAGINATION = {
   DEFAULT_PAGE: 1,

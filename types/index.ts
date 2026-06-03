@@ -57,6 +57,34 @@ export interface Athlete {
   updatedAt: string;
 }
 
+export interface PaginatedResponse<T> {
+  data: T[];
+  meta: {
+    total: number;
+    page: number;
+    pageSize: number;
+    totalPages: number;
+  };
+}
+
+export interface QueryAthletesParams {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+  trainerId?: string;
+}
+
+export interface CreateAthletePayload {
+  email: string;
+  password: string;
+  role: Role;
+  name: string;
+  birthDate?: string;
+  notes?: string;
+}
+
+export type UpdateAthletePayload = Partial<CreateAthletePayload>;
+
 // Trainer
 export interface Trainer {
   id: string;
@@ -66,6 +94,47 @@ export interface Trainer {
   user?: { email: string };
   createdAt: string;
   updatedAt: string;
+}
+
+// Asignación de programa a atleta
+export interface ProgramAssignment {
+  id: string;
+  programId: string;
+  athleteId: string;
+  startDate: string;
+  endDate?: string | null;
+  isActive: boolean;
+  program?: {
+    id: string;
+    name: string;
+    totalWeeks: number;
+    isTemplate: boolean;
+  };
+  athlete?: {
+    id: string;
+    name: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProgramAssignmentPayload {
+  programId: string;
+  athleteId: string;
+  startDate?: string;
+  isActive?: boolean;
+}
+
+export type UpdateProgramAssignmentPayload = {
+  startDate?: string;
+  endDate?: string | null;
+  isActive?: boolean;
+};
+
+export interface QueryProgramAssignmentParams extends QueryParams {
+  programId?: string;
+  athleteId?: string;
+  isActive?: boolean;
 }
 
 // Programa
@@ -78,6 +147,10 @@ export interface Program {
   totalWeeks: number;
   isTemplate: boolean;
   workouts?: Workout[];
+  _count?: {
+    workouts?: number;
+    activeAssignments?: number;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -91,7 +164,8 @@ export interface Workout {
   name?: string;
   notes?: string;
   orderIndex: number;
-  blocks?: WorkoutBlock[];
+  workoutBlocks?: WorkoutBlock[];
+  _count?: { workoutExercises?: number; workoutBlocks?: number };
   createdAt: string;
   updatedAt: string;
 }
@@ -104,7 +178,8 @@ export interface WorkoutBlock {
   name: string;
   orderIndex: number;
   notes?: string;
-  exercises?: WorkoutExercise[];
+  workoutExercises?: WorkoutExercise[];
+  _count?: { workoutExercises?: number };
   createdAt: string;
   updatedAt: string;
 }
@@ -212,25 +287,75 @@ export interface CreateExerciseDto {
   warmupZone?: string;
 }
 
-export interface CreateProgramDto {
+export type CreateExercisePayload = CreateExerciseDto;
+export type UpdateExercisePayload = Partial<CreateExerciseDto>;
+export type QueryExercisesParams = QueryExerciseParams;
+
+export interface SingleExerciseResponse {
+  data: Exercise;
+}
+
+export interface CreateProgramPayload {
   name: string;
   description?: string;
   mesocycle?: string;
   totalWeeks: number;
   isTemplate?: boolean;
+  trainerId?: string;
 }
 
-export interface CreateWorkoutDto {
+export type UpdateProgramPayload = Partial<CreateProgramPayload>;
+
+export interface CreateWorkoutPayload {
   programId: string;
   dayNumber: number;
   dayType?: DayType;
   name?: string;
   notes?: string;
-  orderIndex: number;
+  orderIndex?: number;
+}
+
+export type UpdateWorkoutPayload = Partial<Omit<CreateWorkoutPayload, 'programId'>>;
+
+export interface CreateWorkoutBlockPayload {
+  workoutId: string;
+  type: BlockType;
+  name: string;
+  orderIndex?: number;
+  notes?: string;
+}
+
+export type UpdateWorkoutBlockPayload = Partial<Omit<CreateWorkoutBlockPayload, 'workoutId'>>;
+
+export interface CreateWorkoutExercisePayload {
+  blockId: string;
+  exerciseId: string;
+  muscleGroup?: string;
+  orderIndex?: number;
+  sets?: number;
+  repsOrTime?: string;
+  weightKg?: number;
+  rpeRir?: string;
+  restSeconds?: number;
+  notes?: string;
+  videoUrl?: string;
+}
+
+export type UpdateWorkoutExercisePayload = Partial<
+  Omit<CreateWorkoutExercisePayload, 'blockId' | 'exerciseId'>
+>;
+
+export interface QueryWorkoutBlockParams extends QueryParams {
+  workoutId?: string;
+  type?: BlockType;
+}
+
+export interface QueryWorkoutExerciseParams extends QueryParams {
+  blockId?: string;
+  exerciseId?: string;
 }
 
 export interface CreateWorkoutLogDto {
-  athleteId: string;
   workoutId: string;
   weekNumber: number;
   date: string;
@@ -238,6 +363,11 @@ export interface CreateWorkoutLogDto {
   stressIndex?: number;
   notes?: string;
 }
+
+export type UpdateWorkoutLogDto = Partial<CreateWorkoutLogDto>;
+
+export type CreateWorkoutLogPayload = CreateWorkoutLogDto;
+export type UpdateWorkoutLogPayload = UpdateWorkoutLogDto;
 
 export interface CreateSetLogDto {
   workoutLogId: string;
@@ -248,6 +378,13 @@ export interface CreateSetLogDto {
   rir?: number;
   rpe?: number;
   notes?: string;
+}
+
+export type UpdateSetLogDto = Partial<Omit<CreateSetLogDto, 'workoutLogId' | 'workoutExerciseId' | 'setNumber'>>;
+
+export interface QuerySetLogParams extends QueryParams {
+  workoutLogId?: string;
+  workoutExerciseId?: string;
 }
 
 export interface CreateMeasurementDto {

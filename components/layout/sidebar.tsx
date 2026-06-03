@@ -94,7 +94,7 @@ export function Sidebar({ collapsed, setCollapsed, mobileOpen, setMobileOpen }: 
                   <Dumbbell className="h-5 w-5 text-primary-foreground" />
                 </div>
                 <span className="text-xl font-bold text-foreground">
-                  TRAINER<span className="text-primary">PRO</span>
+                  SS<span className="text-primary">ENGINE</span>
                 </span>
               </Link>
             )}

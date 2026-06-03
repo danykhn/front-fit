@@ -15,26 +15,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'TrainerPRO - Plataforma Personal Trainer',
-  description: 'Gestiona tus atletas, programas de entrenamiento y seguimiento de progreso',
-  generator: 'v0.app',
-  icons: {
-    icon: [
-      {
-        url: '/icon-light-32x32.png',
-        media: '(prefers-color-scheme: light)',
-      },
-      {
-        url: '/icon-dark-32x32.png',
-        media: '(prefers-color-scheme: dark)',
-      },
-      {
-        url: '/icon.svg',
-        type: 'image/svg+xml',
-      },
-    ],
-    apple: '/apple-icon.png',
-  },
+  title: 'SSENGINE - Planificación y rendimiento deportivo',
+  description: 'Este espacio nace para compartir experiencias reales, entrenamientos, herramientas y conocimientos que puedan ayudarte a rendir más, moverte mejor y disfrutar del proceso',
+  generator: 'danykhn'
+  
 }
 
 export const viewport: Viewport = {
