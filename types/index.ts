@@ -251,6 +251,11 @@ export interface Measurement {
   bodyFatPct?: number;
   weightDiffPct?: number;
   notes?: string;
+  athlete?: {
+    id: string;
+    name: string;
+    trainerId?: string;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -388,7 +393,7 @@ export interface QuerySetLogParams extends QueryParams {
 }
 
 export interface CreateMeasurementDto {
-  athleteId: string;
+  athleteId?: string;
   weekNumber: number;
   date: string;
   weightKg?: number;
@@ -401,6 +406,11 @@ export interface CreateMeasurementDto {
   bodyFatPct?: number;
   notes?: string;
 }
+
+export type UpdateMeasurementDto = Partial<Omit<CreateMeasurementDto, 'athleteId'>>;
+
+export type CreateMeasurementPayload = CreateMeasurementDto;
+export type UpdateMeasurementPayload = UpdateMeasurementDto;
 
 // Query params
 export interface QueryParams {

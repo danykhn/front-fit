@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { AppLayout } from '@/components/layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Select,
   SelectContent,
@@ -13,102 +15,129 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { 
-  Plus, 
-  Search, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Plus,
+  Search,
   TrendingUp,
   TrendingDown,
   Scale,
   Ruler,
   Calendar,
-  ChevronRight
+  MoreVertical,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
+import { useAuthStore } from '@/store/auth-store';
+import { useMeasurements } from '@/hooks/use-measurements';
+import { useAthletes } from '@/hooks/use-athletes';
+import { MeasurementFormDialog } from '@/components/measurements/measurement-form-dialog';
+import { DeleteMeasurementDialog } from '@/components/measurements/delete-measurement-dialog';
 import type { Measurement } from '@/types';
 
-// Mock data
-const mockMeasurements: (Measurement & { athleteName: string })[] = [
-  {
-    id: '1',
-    athleteId: 'athlete-1',
-    athleteName: 'Carlos Martinez',
-    weekNumber: 8,
-    date: '2024-06-10',
-    weightKg: 82.5,
-    waistCm: 84,
-    hipCm: 98,
-    chestCm: 105,
-    armCm: 38,
-    thighCm: 58,
-    calfCm: 38,
-    bodyFatPct: 15.2,
-    weightDiffPct: -0.8,
-    notes: 'Buen progreso, aumentar calorias',
-    createdAt: '2024-06-10',
-    updatedAt: '2024-06-10',
-  },
-  {
-    id: '2',
-    athleteId: 'athlete-2',
-    athleteName: 'Maria Rodriguez',
-    weekNumber: 6,
-    date: '2024-06-08',
-    weightKg: 65.2,
-    waistCm: 72,
-    hipCm: 95,
-    chestCm: 88,
-    armCm: 28,
-    thighCm: 54,
-    calfCm: 35,
-    bodyFatPct: 22.5,
-    weightDiffPct: -1.2,
-    createdAt: '2024-06-08',
-    updatedAt: '2024-06-08',
-  },
-  {
-    id: '3',
-    athleteId: 'athlete-3',
-    athleteName: 'Juan Perez',
-    weekNumber: 10,
-    date: '2024-06-05',
-    weightKg: 90.0,
-    waistCm: 92,
-    hipCm: 102,
-    chestCm: 112,
-    armCm: 42,
-    thighCm: 62,
-    calfCm: 40,
-    bodyFatPct: 18.0,
-    weightDiffPct: 0.5,
-    notes: 'Manteniendo peso, ajustar macros',
-    createdAt: '2024-06-05',
-    updatedAt: '2024-06-05',
-  },
-];
+function formatDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('es-AR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
 
-const athletes = [
-  { id: 'athlete-1', name: 'Carlos Martinez' },
-  { id: 'athlete-2', name: 'Maria Rodriguez' },
-  { id: 'athlete-3', name: 'Juan Perez' },
-  { id: 'athlete-4', name: 'Ana Garcia' },
-];
+function getInitials(name: string): string {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((n) => n[0]?.toUpperCase() ?? '')
+    .join('');
+}
+
+function formatNumber(n: number | undefined | null, digits = 1): string {
+  if (n === undefined || n === null) return '-';
+  return n.toFixed(digits);
+}
 
 export default function MeasurementsPage() {
-  const [searchQuery, setSearchQuery] = useState('');
+  const user = useAuthStore((state) => state.user);
+  const role = user?.role;
+
+  const [page] = useState(1);
+  const [search, setSearch] = useState('');
   const [athleteFilter, setAthleteFilter] = useState<string>('all');
-  const [measurements] = useState(mockMeasurements);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Measurement | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Measurement | null>(null);
 
-  const filteredMeasurements = measurements.filter(m => {
-    const matchesSearch = m.athleteName.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesAthlete = athleteFilter === 'all' || m.athleteId === athleteFilter;
-    return matchesSearch && matchesAthlete;
+  const queryParams = useMemo(
+    () => ({
+      page,
+      pageSize: 50,
+      athleteId: athleteFilter !== 'all' ? athleteFilter : undefined,
+    }),
+    [page, athleteFilter],
+  );
+
+  const {
+    data: measurementsResp,
+    isLoading,
+    error,
+  } = useMeasurements(queryParams);
+  const measurements = measurementsResp?.data ?? [];
+
+  const { data: athletesResp, isLoading: isLoadingAthletes } = useAthletes({
+    pageSize: 100,
   });
+  const athletes = athletesResp?.data ?? [];
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
+  // Filtrado local por nombre (el backend no soporta search en measurements)
+  const filtered = useMemo(() => {
+    if (!search.trim()) return measurements;
+    const term = search.toLowerCase();
+    return measurements.filter((m) => {
+      const name = m.athlete?.name ?? '';
+      return name.toLowerCase().includes(term);
     });
+  }, [measurements, search]);
+
+  // Resumen
+  const summary = useMemo(() => {
+    const total = measurements.length;
+    const withWeight = measurements.filter((m) => m.weightKg !== undefined);
+    const avgDiffPct =
+      withWeight.length > 0
+        ? withWeight.reduce(
+            (acc, m) => acc + (m.weightDiffPct ?? 0),
+            0,
+          ) / withWeight.length
+        : 0;
+    const avgWaist =
+      measurements.filter((m) => m.waistCm !== undefined).length > 0
+        ? measurements
+            .filter((m) => m.waistCm !== undefined)
+            .reduce((acc, m) => acc + (m.waistCm ?? 0), 0) /
+          measurements.filter((m) => m.waistCm !== undefined).length
+        : 0;
+    const latest = measurements[0];
+    return { total, avgDiffPct, avgWaist, latest };
+  }, [measurements]);
+
+  const handleNew = () => {
+    setEditTarget(null);
+    setFormOpen(true);
+  };
+
+  const handleEdit = (m: Measurement) => {
+    setEditTarget(m);
+    setFormOpen(true);
+  };
+
+  const handleDelete = (m: Measurement) => {
+    setDeleteTarget(m);
   };
 
   return (
@@ -123,8 +152,16 @@ export default function MeasurementsPage() {
                   <Scale className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                 </div>
                 <div>
-                  <p className="text-lg sm:text-2xl font-bold text-foreground">{measurements.length}</p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">Mediciones</p>
+                  {isLoading ? (
+                    <Skeleton className="h-6 w-10" />
+                  ) : (
+                    <p className="text-lg sm:text-2xl font-bold text-foreground">
+                      {summary.total}
+                    </p>
+                  )}
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">
+                    Mediciones
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -132,12 +169,35 @@ export default function MeasurementsPage() {
           <Card className="border-border/50">
             <CardContent className="p-3 sm:p-4">
               <div className="flex items-center gap-2 sm:gap-3">
-                <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg bg-green-500/10">
-                  <TrendingDown className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" />
+                <div
+                  className={`flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-lg ${
+                    summary.avgDiffPct < 0
+                      ? 'bg-green-500/10'
+                      : summary.avgDiffPct > 0
+                        ? 'bg-red-500/10'
+                        : 'bg-muted'
+                  }`}
+                >
+                  {summary.avgDiffPct < 0 ? (
+                    <TrendingDown className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" />
+                  ) : summary.avgDiffPct > 0 ? (
+                    <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-red-500" />
+                  ) : (
+                    <Scale className="h-4 w-4 sm:h-5 sm:w-5 text-muted-foreground" />
+                  )}
                 </div>
                 <div>
-                  <p className="text-lg sm:text-2xl font-bold text-foreground">-0.8%</p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">Peso Prom.</p>
+                  {isLoading ? (
+                    <Skeleton className="h-6 w-14" />
+                  ) : (
+                    <p className="text-lg sm:text-2xl font-bold text-foreground">
+                      {summary.avgDiffPct > 0 ? '+' : ''}
+                      {summary.avgDiffPct.toFixed(1)}%
+                    </p>
+                  )}
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">
+                    Var. peso prom.
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -149,8 +209,16 @@ export default function MeasurementsPage() {
                   <Ruler className="h-4 w-4 sm:h-5 sm:w-5 text-blue-500" />
                 </div>
                 <div>
-                  <p className="text-lg sm:text-2xl font-bold text-foreground">82.6</p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">Cintura (cm)</p>
+                  {isLoading ? (
+                    <Skeleton className="h-6 w-10" />
+                  ) : (
+                    <p className="text-lg sm:text-2xl font-bold text-foreground">
+                      {formatNumber(summary.avgWaist, 1)}
+                    </p>
+                  )}
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">
+                    Cintura (cm)
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -162,13 +230,29 @@ export default function MeasurementsPage() {
                   <Calendar className="h-4 w-4 sm:h-5 sm:w-5 text-purple-500" />
                 </div>
                 <div>
-                  <p className="text-lg sm:text-2xl font-bold text-foreground">Hoy</p>
-                  <p className="text-[10px] sm:text-xs text-muted-foreground">Ultima</p>
+                  {isLoading ? (
+                    <Skeleton className="h-6 w-20" />
+                  ) : (
+                    <p className="text-sm sm:text-base font-bold text-foreground truncate">
+                      {summary.latest ? formatDate(summary.latest.date) : '—'}
+                    </p>
+                  )}
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">
+                    Última
+                  </p>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
+
+        {error && (
+          <Card className="border-destructive/30 bg-destructive/5">
+            <CardContent className="p-4 text-sm text-destructive">
+              No se pudieron cargar las mediciones. Intenta recargar.
+            </CardContent>
+          </Card>
+        )}
 
         {/* Filters */}
         <Card className="border-border/50">
@@ -178,9 +262,9 @@ export default function MeasurementsPage() {
                 <div className="relative flex-1 sm:max-w-sm">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Buscar atleta..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
                     className="pl-9 bg-input/50 h-9 sm:h-10"
                   />
                 </div>
@@ -190,17 +274,20 @@ export default function MeasurementsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos</SelectItem>
-                    {athletes.map((athlete) => (
-                      <SelectItem key={athlete.id} value={athlete.id}>
-                        {athlete.name}
+                    {athletes.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <Button className="bg-primary hover:bg-primary/90 h-9 sm:h-10 text-sm">
+              <Button
+                onClick={handleNew}
+                className="bg-primary hover:bg-primary/90 h-9 sm:h-10 text-sm"
+              >
                 <Plus className="mr-1 sm:mr-2 h-4 w-4" />
-                <span className="hidden sm:inline">Nueva Medicion</span>
+                <span className="hidden sm:inline">Nueva Medición</span>
                 <span className="sm:hidden">Nueva</span>
               </Button>
             </div>
@@ -208,125 +295,236 @@ export default function MeasurementsPage() {
         </Card>
 
         {/* Measurements List */}
-        <div className="space-y-3 sm:space-y-4">
-          {filteredMeasurements.map((measurement) => (
-            <Card key={measurement.id} className="border-border/50 hover:border-primary/30 transition-colors">
-              <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                    <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs sm:text-sm font-bold text-primary">
-                        {measurement.athleteName.split(' ').map(n => n[0]).join('')}
-                      </span>
-                    </div>
-                    <div className="min-w-0">
-                      <CardTitle className="text-sm sm:text-base truncate">{measurement.athleteName}</CardTitle>
-                      <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground flex-wrap">
-                        <div className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          <span>{formatDate(measurement.date)}</span>
-                        </div>
-                        <Badge variant="secondary" className="text-[10px] sm:text-xs">
-                          Sem {measurement.weekNumber}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm" className="text-primary h-8 px-2 flex-shrink-0">
-                    <span className="hidden sm:inline text-xs">Historial</span>
-                    <ChevronRight className="h-4 w-4 sm:ml-1" />
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="p-3 sm:p-6 pt-2 sm:pt-2">
-                {/* Mobile: 3 columns, Desktop: more */}
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-7 sm:gap-4">
-                  {/* Weight */}
-                  <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center">
-                    <p className="text-base sm:text-lg font-bold text-foreground">{measurement.weightKg}</p>
-                    <p className="text-[10px] sm:text-xs text-muted-foreground">Peso (kg)</p>
-                    {measurement.weightDiffPct !== undefined && (
-                      <div className={`flex items-center justify-center gap-0.5 mt-0.5 ${
-                        measurement.weightDiffPct < 0 ? 'text-green-500' : 
-                        measurement.weightDiffPct > 0 ? 'text-red-500' : 
-                        'text-muted-foreground'
-                      }`}>
-                        {measurement.weightDiffPct < 0 ? (
-                          <TrendingDown className="h-3 w-3" />
-                        ) : measurement.weightDiffPct > 0 ? (
-                          <TrendingUp className="h-3 w-3" />
-                        ) : null}
-                        <span className="text-[10px] sm:text-xs font-medium">{measurement.weightDiffPct}%</span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* Body Fat */}
-                  {measurement.bodyFatPct && (
-                    <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center">
-                      <p className="text-base sm:text-lg font-bold text-foreground">{measurement.bodyFatPct}%</p>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground">Grasa</p>
-                    </div>
-                  )}
+        {isLoading ? (
+          <div className="space-y-3 sm:space-y-4">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} className="h-32 w-full" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <Card className="border-border/50">
+            <CardContent className="p-12 text-center text-muted-foreground">
+              <Scale className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <h3 className="text-lg font-semibold text-foreground mb-1">
+                Sin mediciones
+              </h3>
+              <p className="mb-4">
+                {search || athleteFilter !== 'all'
+                  ? 'No hay mediciones que coincidan con los filtros'
+                  : role === 'ATHLETE'
+                    ? 'Aun no registraste ninguna medición'
+                    : 'Aun no hay mediciones registradas'}
+              </p>
+              <Button onClick={handleNew}>
+                <Plus className="h-4 w-4 mr-1" />
+                Crear primera medición
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-3 sm:space-y-4">
+            {filtered.map((m) => (
+              <MeasurementCard
+                key={m.id}
+                measurement={m}
+                onEdit={() => handleEdit(m)}
+                onDelete={() => handleDelete(m)}
+              />
+            ))}
+          </div>
+        )}
 
-                  {/* Waist */}
-                  {measurement.waistCm && (
-                    <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center">
-                      <p className="text-base sm:text-lg font-bold text-foreground">{measurement.waistCm}</p>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground">Cintura</p>
-                    </div>
-                  )}
-
-                  {/* Hip - hidden on mobile */}
-                  {measurement.hipCm && (
-                    <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center hidden sm:block">
-                      <p className="text-base sm:text-lg font-bold text-foreground">{measurement.hipCm}</p>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground">Cadera</p>
-                    </div>
-                  )}
-
-                  {/* Chest - hidden on mobile */}
-                  {measurement.chestCm && (
-                    <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center hidden lg:block">
-                      <p className="text-base sm:text-lg font-bold text-foreground">{measurement.chestCm}</p>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground">Pecho</p>
-                    </div>
-                  )}
-
-                  {/* Arm - hidden on mobile */}
-                  {measurement.armCm && (
-                    <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center hidden lg:block">
-                      <p className="text-base sm:text-lg font-bold text-foreground">{measurement.armCm}</p>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground">Brazo</p>
-                    </div>
-                  )}
-
-                  {/* Thigh - hidden on mobile */}
-                  {measurement.thighCm && (
-                    <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center hidden lg:block">
-                      <p className="text-base sm:text-lg font-bold text-foreground">{measurement.thighCm}</p>
-                      <p className="text-[10px] sm:text-xs text-muted-foreground">Muslo</p>
-                    </div>
-                  )}
-                </div>
-
-                {measurement.notes && (
-                  <div className="mt-2 sm:mt-4 p-2 sm:p-3 rounded-lg bg-primary/5 border border-primary/20">
-                    <p className="text-xs sm:text-sm text-foreground">
-                      <span className="font-medium text-primary">Notas:</span> {measurement.notes}
-                    </p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Results count */}
         <p className="text-xs sm:text-sm text-muted-foreground text-center">
-          {filteredMeasurements.length} de {measurements.length} mediciones
+          {filtered.length} de {measurements.length} mediciones
         </p>
       </div>
+
+      <MeasurementFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        measurement={editTarget}
+      />
+      <DeleteMeasurementDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+        measurement={deleteTarget}
+      />
     </AppLayout>
+  );
+}
+
+function MeasurementCard({
+  measurement,
+  onEdit,
+  onDelete,
+}: {
+  measurement: Measurement;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const name = measurement.athlete?.name ?? 'Atleta';
+
+  return (
+    <Card className="border-border/50 hover:border-primary/30 transition-colors">
+      <CardHeader className="p-3 sm:p-6 pb-2 sm:pb-2">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-primary/20 flex items-center justify-center flex-shrink-0">
+              <span className="text-xs sm:text-sm font-bold text-primary">
+                {getInitials(name)}
+              </span>
+            </div>
+            <div className="min-w-0">
+              <CardTitle className="text-sm sm:text-base truncate">
+                {name}
+              </CardTitle>
+              <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-muted-foreground flex-wrap">
+                <div className="flex items-center gap-1">
+                  <Calendar className="h-3 w-3" />
+                  <span>{formatDate(measurement.date)}</span>
+                </div>
+                <Badge variant="secondary" className="text-[10px] sm:text-xs">
+                  Sem {measurement.weekNumber}
+                </Badge>
+              </div>
+            </div>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0"
+                aria-label="Acciones"
+              >
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onEdit}>
+                <Pencil className="h-4 w-4 mr-2" />
+                Editar
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={onDelete}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Eliminar
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </CardHeader>
+      <CardContent className="p-3 sm:p-6 pt-2 sm:pt-2">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-7 sm:gap-4">
+          {/* Weight */}
+          {measurement.weightKg !== undefined && (
+            <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center">
+              <p className="text-base sm:text-lg font-bold text-foreground">
+                {formatNumber(measurement.weightKg, 1)}
+              </p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">
+                Peso (kg)
+              </p>
+              {measurement.weightDiffPct !== undefined &&
+                measurement.weightDiffPct !== null && (
+                  <div
+                    className={`flex items-center justify-center gap-0.5 mt-0.5 ${
+                      measurement.weightDiffPct < 0
+                        ? 'text-green-500'
+                        : measurement.weightDiffPct > 0
+                          ? 'text-red-500'
+                          : 'text-muted-foreground'
+                    }`}
+                  >
+                    {measurement.weightDiffPct < 0 ? (
+                      <TrendingDown className="h-3 w-3" />
+                    ) : measurement.weightDiffPct > 0 ? (
+                      <TrendingUp className="h-3 w-3" />
+                    ) : null}
+                    <span className="text-[10px] sm:text-xs font-medium">
+                      {measurement.weightDiffPct > 0 ? '+' : ''}
+                      {measurement.weightDiffPct}%
+                    </span>
+                  </div>
+                )}
+            </div>
+          )}
+
+          {measurement.bodyFatPct !== undefined && (
+            <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center">
+              <p className="text-base sm:text-lg font-bold text-foreground">
+                {formatNumber(measurement.bodyFatPct, 1)}%
+              </p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Grasa</p>
+            </div>
+          )}
+
+          {measurement.waistCm !== undefined && (
+            <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center">
+              <p className="text-base sm:text-lg font-bold text-foreground">
+                {formatNumber(measurement.waistCm, 1)}
+              </p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Cintura</p>
+            </div>
+          )}
+
+          {measurement.hipCm !== undefined && (
+            <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center hidden sm:block">
+              <p className="text-base sm:text-lg font-bold text-foreground">
+                {formatNumber(measurement.hipCm, 1)}
+              </p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Cadera</p>
+            </div>
+          )}
+
+          {measurement.chestCm !== undefined && (
+            <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center hidden lg:block">
+              <p className="text-base sm:text-lg font-bold text-foreground">
+                {formatNumber(measurement.chestCm, 1)}
+              </p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Pecho</p>
+            </div>
+          )}
+
+          {measurement.armCm !== undefined && (
+            <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center hidden lg:block">
+              <p className="text-base sm:text-lg font-bold text-foreground">
+                {formatNumber(measurement.armCm, 1)}
+              </p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Brazo</p>
+            </div>
+          )}
+
+          {measurement.thighCm !== undefined && (
+            <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center hidden lg:block">
+              <p className="text-base sm:text-lg font-bold text-foreground">
+                {formatNumber(measurement.thighCm, 1)}
+              </p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Muslo</p>
+            </div>
+          )}
+
+          {measurement.calfCm !== undefined && (
+            <div className="p-2 sm:p-3 rounded-lg bg-secondary/30 text-center hidden lg:block">
+              <p className="text-base sm:text-lg font-bold text-foreground">
+                {formatNumber(measurement.calfCm, 1)}
+              </p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Pantorrilla</p>
+            </div>
+          )}
+        </div>
+
+        {measurement.notes && (
+          <div className="mt-2 sm:mt-4 p-2 sm:p-3 rounded-lg bg-primary/5 border border-primary/20">
+            <p className="text-xs sm:text-sm text-foreground">
+              <span className="font-medium text-primary">Notas:</span>{' '}
+              {measurement.notes}
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
